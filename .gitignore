@@ -1,2 +1,2 @@
-SpotifyPlaylistAlbum/*
-!SpotifyPlaylistAlbum/*.py
+*.json
+*.cache
