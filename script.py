@@ -87,6 +87,19 @@ def cachePlaylistLinks(playlistLink: str, client_id: str, client_secret: str, fi
 
     return None
 
+def runDownLoadCommand(albumURL : str, outputDir : str, timeout = 500) -> bool:
+    try:
+        command = ["python", "-m", "spotdl", albumURL, "--output", outputDir]
+        result = subprocess.run(
+            command,
+            check=True,
+            timeout=timeout
+        )
+    except Exception as e:
+        print(e)
+        return False
+    return True
+
 def loadCachedPlaylist(playlistLink : str, filename = "playlistNamesCache.json") -> None:
     try:
         with open(filename, "r") as f:
@@ -162,15 +175,54 @@ def load_playlist(client_id: str, client_secret: str, playlist: str) -> set:
             break
     return album_data
 
+def processPlaylistDownloads(playlistLink: str, outputDir : str, count : int, filename="playlistNamesCache.json"):
+    try:
+        with open(filename, "r") as f:
+            try:
+                data = json.load(f)
+            except json.JSONDecodeError:
+                print("Error: JSON is malformed.")
+                return
+    except IOError:
+        print("Error opening file.")
+        return
+    if playlistLink not in data:
+        print(f"Playlist {playlistLink} not found in the cache.")
+        return
+    print(f"\nManaging Playlist: {playlistLink} (Last updated: {data[playlistLink]['timestamp']})")
+    album_links = data[playlistLink].get("album_links", [])
+    index : int
+    index = 0
+    for i, (album_url, album_name, album_artist, download_flag) in enumerate(album_links):
+        if index >= count:
+            break
+        if not download_flag:
+            print(f"\nProcessing: {album_name} by {album_artist}...")
+            if runDownLoadCommand(album_url, outputDir):
+                album_links[i] = (album_url, album_name, album_artist, True)
+                print(f"Download for {album_name} by {album_artist} completed and marked as downloaded.")
+            else:
+                print(f"Failed to download {album_name} by {album_artist}.")
+            try:
+                with open(filename, "w") as f:
+                    json.dump(data, f, indent=4)
+                print("Updated playlist data saved after this download.")
+            except IOError:
+                print("Error saving to file.")
+        index = index + 1
+    print("\nFinished downloading playlist upto count")
+
 def main():
-    parser = argparse.ArgumentParser(description="A sample CLI tool for managing client credentials.")
-    parser.add_argument("-i", "--client_id", type=str, help="Enter Spotify Client ID")
-    parser.add_argument("-s", "--client_secret", type=str, help="Enter Spotify Client Secret")
-    parser.add_argument("-p", "--playlist", type=str, help="Spotify Playlist Link")
+    parser = argparse.ArgumentParser(description="A tool using Spotdl and Spotify Web API to make either a backup of all albums from a playlist in a JSON format, or to download all albums using Spotdl."
+                                     "\n Must have spotdl and spotipy installed through pip, and a spotiy web app account.\n\n"
+                                     "Use -i and -s first, then do -p -o -c, afterwards do -p -e and finally do -p -l")
+    parser.add_argument("-i", "--client_id", type=str, help="Enter Spotify Client ID.")
+    parser.add_argument("-s", "--client_secret", type=str, help="Enter Spotify Client Secret.")
+    parser.add_argument("-p", "--playlist", type=str, help="Spotify Playlist Link.")
     parser.add_argument("-o", "--output", type=str, help="Folder Location for where to download, default current directory")
-    parser.add_argument("-c", "--cache_link", help="Saves playlist album links in a JSON file", action="store_true")
-    parser.add_argument("-e", "--edit_cache", help="Use cached values for provided link, and downloads", action="store_true")
-    parser.add_argument("-l", "--load_link", help="Use cached values for provided link, and downloads", action="store_true")
+    parser.add_argument("-c", "--cache_link", help="Saves playlist album links in a JSON file. Stored in script local directory under file paylistNamesCache.json", action="store_true")
+    parser.add_argument("-e", "--edit_cache", help="CLI for which albums to include or exclude. Must go through every album at once, otherwise none of the changes are saved.", action="store_true")
+    parser.add_argument("-l", "--load_link", type=int, help="Uses cached values to download all albums, default value of 10 albums at a time. Ensure its less than 100 otherwise it can take a while.", const=10, nargs="?")
 
     help_flag_passed = any(arg in sys.argv for arg in ("-h", "--help"))
 
@@ -180,7 +232,7 @@ def main():
         parser.print_help()
         sys.exit(0)
 
-    if bool(args.client_id) ^ bool(args.client_secret):  # XOR: One is provided, but not the other
+    if bool(args.client_id) ^ bool(args.client_secret):
         parser.error("Both --client_id and --client_secret must be provided together.")
     
     if args.client_id and args.client_secret:
@@ -200,25 +252,13 @@ def main():
     
     if args.cache_link:
         cachePlaylistLinks(playlistLink, client_id, client_secret)
-    
-    if args.load_link: 
-        loadCachedPlaylist(playlistLink)
 
     if args.edit_cache:
         manage_playlist_downloads(playlistLink)
 
-    # if args.client_id and args.client_secret:
-    #     save_client_cache(args.client_id, args.client_secret)
-    # if args.playlist:
-    #     a, b = load_client_cache()
-    #     c = load_playlist(a, b, args.playlist)
-    #     print("Number of albums: ", len(c))
-    #     for d in c:
-    #         try:
-    #             command = ["python", "-m", "spotdl", d, "--output", output]
-    #             result = subprocess.run(command, text=True, timeout=150)
-    #         except Exception as e:
-    #             continue
+    if args.load_link:
+        processPlaylistDownloads(playlistLink, output, args.load_link)
+
 
 if __name__ == "__main__":
     main()
