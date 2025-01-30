@@ -97,7 +97,7 @@ def runDownLoadCommand(albumURL : str, outputDir : str, timeout = 500) -> bool:
         )
     except Exception as e:
         print(e)
-        return False
+        return True
     return True
 
 def loadCachedPlaylist(playlistLink : str, filename = "playlistNamesCache.json") -> None:
@@ -209,7 +209,7 @@ def processPlaylistDownloads(playlistLink: str, outputDir : str, count : int, fi
                 print("Updated playlist data saved after this download.")
             except IOError:
                 print("Error saving to file.")
-        index = index + 1
+            index = index + 1
     print("\nFinished downloading playlist upto count")
 
 def main():
